@@ -23,9 +23,14 @@
   body {
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     min-height:100vh;
+    min-height:100dvh;
     font-family:'Courier New', monospace;
     color:#e8e8d0;
     padding:8px;
+    padding-top:max(8px, env(safe-area-inset-top));
+    padding-bottom:max(8px, env(safe-area-inset-bottom));
+    padding-left:max(8px, env(safe-area-inset-left));
+    padding-right:max(8px, env(safe-area-inset-right));
   }
   #stage {
     width:100%;
@@ -33,15 +38,25 @@
     display:flex;
     flex-direction:column;
     align-items:center;
+    max-height:100dvh;
   }
   #wrap {
     position:relative;
-    width:100%;
+    width:min(800px, 96vw, calc(85dvh * 1.6));
     aspect-ratio: 800 / 500;
     border:6px solid #2b2b2b;
     border-radius:4px;
     box-shadow:0 0 0 3px #7a5a2a, 0 0 40px rgba(0,0,0,0.8);
     touch-action:none;
+  }
+  /* Landscape phones: URL bar eats vertical space, so drop the title/tip and
+     size the pitch off available height instead of width */
+  @media (orientation:landscape) and (max-height:520px){
+    body { padding:4px; }
+    h1 { display:none; }
+    #tip { display:none; }
+    #hud { margin-top:4px; }
+    #wrap { width:min(800px, 96vw, calc(78dvh * 1.6)); }
   }
   canvas {
     display:block; image-rendering: pixelated; background:#1a5c2a;
@@ -82,6 +97,7 @@
     text-align:center; pointer-events:none;
     display:none;
     width:90%;
+    white-space:pre-line;
   }
   #tip {
     margin-top:10px; font-size:11px; color:#8a8a6a; letter-spacing:1px; text-align:center;
@@ -104,8 +120,8 @@
     position:absolute;
     left:4%;
     bottom:6%;
-    width:26vw;
-    height:26vw;
+    width:26vmin;
+    height:26vmin;
     max-width:120px;
     max-height:120px;
     min-width:80px;
@@ -130,8 +146,8 @@
     position:absolute;
     right:4%;
     bottom:32%;
-    width:19vw;
-    height:19vw;
+    width:19vmin;
+    height:19vmin;
     max-width:88px;
     max-height:88px;
     min-width:60px;
@@ -156,8 +172,8 @@
     position:absolute;
     right:4%;
     bottom:6%;
-    width:17vw;
-    height:17vw;
+    width:17vmin;
+    height:17vmin;
     max-width:78px;
     max-height:78px;
     min-width:54px;
@@ -182,8 +198,8 @@
     position:absolute;
     right:25%;
     bottom:4%;
-    width:15vw;
-    height:15vw;
+    width:15vmin;
+    height:15vmin;
     max-width:68px;
     max-height:68px;
     min-width:48px;
@@ -210,12 +226,266 @@
     h1 { margin-bottom:4px; }
     #hud { font-size:10px; }
   }
+
+  #utilBtns {
+    position:absolute;
+    top:6px; right:6px;
+    display:flex;
+    gap:6px;
+    z-index:20;
+  }
+  .utilBtn {
+    background:rgba(0,0,0,0.5);
+    border:1px solid rgba(232,232,208,0.4);
+    color:#e8e8d0;
+    font-family:'Courier New', monospace;
+    font-size:10px;
+    letter-spacing:0.5px;
+    padding:5px 8px;
+    border-radius:4px;
+    cursor:pointer;
+    pointer-events:auto;
+  }
+  .utilBtn:active { background:rgba(242,210,75,0.4); }
+  #installBtn { display:none; }
+  body.touch #fullscreenBtn { display:inline-block; }
+  #fullscreenBtn { display:none; }
+
+  /* ---- Start screen: neon esports "Football Legends" style ---- */
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Anton&display=swap');
+
+  #startScreen {
+    position:absolute; inset:0;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(140,60,220,0.35) 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 80%, rgba(60,120,220,0.3) 0%, transparent 55%),
+      linear-gradient(160deg, #0a0714 0%, #150a24 45%, #0a0714 100%);
+    display:flex; align-items:center; justify-content:center;
+    z-index:30;
+    overflow-y:auto;
+    padding:14px;
+    font-family:'Rajdhani', 'Courier New', monospace;
+  }
+  #startScreen::before {
+    content:'';
+    position:absolute; inset:0;
+    background:
+      repeating-linear-gradient(115deg, rgba(180,120,255,0.05) 0px, rgba(180,120,255,0.05) 1px, transparent 1px, transparent 40px);
+    pointer-events:none;
+  }
+  #startInner {
+    position:relative;
+    display:flex; flex-direction:column; align-items:center;
+    gap:12px;
+    padding:8px;
+    width:100%;
+    max-width:360px;
+    max-height:100%;
+  }
+  #startEyebrow {
+    font-size:10px;
+    letter-spacing:4px;
+    color:#a888ff;
+    text-align:center;
+    font-weight:600;
+  }
+  #startTitle {
+    font-family:'Anton', 'Rajdhani', sans-serif;
+    font-size:clamp(26px, 8vw, 40px);
+    letter-spacing:1px;
+    text-align:center;
+    line-height:0.95;
+    color:#fff;
+    text-transform:uppercase;
+  }
+  #startTitle .accent {
+    display:block;
+    background:linear-gradient(90deg, #b57bff, #7ab8ff);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    filter:drop-shadow(0 0 14px rgba(160,120,255,0.6));
+  }
+  #startTagline {
+    font-size:12px;
+    letter-spacing:3px;
+    color:#7ab8ff;
+    text-align:center;
+    font-weight:600;
+    margin-top:-6px;
+  }
+
+  #heroWrap {
+    position:relative;
+    width:100%;
+    border-radius:12px;
+    overflow:hidden;
+    border:1px solid rgba(180,140,255,0.35);
+    box-shadow:0 0 30px rgba(120,80,220,0.3);
+  }
+  #heroImg {
+    display:block;
+    width:100%;
+    height:auto;
+    max-height:180px;
+    object-fit:cover;
+    object-position:center 15%;
+  }
+  #heroRankBadge {
+    position:absolute;
+    top:8px; right:8px;
+    display:flex; align-items:center; gap:6px;
+    background:rgba(10,5,20,0.75);
+    border:1px solid rgba(180,140,255,0.45);
+    border-radius:8px;
+    padding:5px 9px;
+    backdrop-filter:blur(2px);
+  }
+
+  /* Player card */
+  #playerCard {
+    width:100%;
+    background:linear-gradient(160deg, rgba(40,20,70,0.75), rgba(15,10,30,0.85));
+    border:1px solid rgba(180,140,255,0.35);
+    border-radius:10px;
+    padding:14px;
+    box-shadow:0 0 24px rgba(120,80,220,0.25), inset 0 0 20px rgba(120,80,220,0.08);
+  }
+  #cardTopRow {
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:10px;
+  }
+  #cardBadge {
+    width:34px; height:34px;
+    border-radius:50%;
+    background:linear-gradient(150deg, #b57bff, #6a8cff);
+    display:flex; align-items:center; justify-content:center;
+    font-size:16px;
+    flex-shrink:0;
+    box-shadow:0 0 10px rgba(160,120,255,0.6);
+  }
+  #cardRank {
+    font-size:10px;
+    letter-spacing:2px;
+    color:#b89bff;
+    font-weight:600;
+  }
+  #cardRankName {
+    font-size:15px;
+    letter-spacing:1px;
+    color:#fff;
+    font-weight:700;
+    text-transform:uppercase;
+  }
+  #startInner label {
+    font-size:10px;
+    letter-spacing:2px;
+    color:#8a7ab0;
+    align-self:flex-start;
+    font-weight:600;
+  }
+  #playerNameInput {
+    width:100%;
+    background:rgba(0,0,0,0.4);
+    border:1px solid rgba(180,140,255,0.4);
+    color:#fff;
+    font-family:'Rajdhani', monospace;
+    font-weight:700;
+    font-size:17px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    padding:9px 12px;
+    border-radius:6px;
+    text-align:center;
+    margin-bottom:10px;
+  }
+  #playerNameInput:focus { outline:none; border-color:#b57bff; box-shadow:0 0 10px rgba(180,140,255,0.5); }
+  #statGrid {
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:8px;
+    text-align:center;
+  }
+  .statCell { display:flex; flex-direction:column; gap:3px; }
+  .statLabel { font-size:9px; letter-spacing:1px; color:#8a7ab0; font-weight:600; }
+  .statValue { font-size:18px; font-weight:700; color:#fff; }
+  .statBar { height:3px; background:rgba(255,255,255,0.12); border-radius:2px; overflow:hidden; }
+  .statBarFill { height:100%; background:linear-gradient(90deg, #b57bff, #7ab8ff); }
+  #careerLine {
+    margin-top:10px;
+    padding-top:8px;
+    border-top:1px solid rgba(180,140,255,0.2);
+    font-size:11px;
+    color:#a898d0;
+    text-align:center;
+    letter-spacing:1px;
+  }
+
+  #startBtn {
+    width:100%;
+    background:linear-gradient(90deg, #7b3fe4, #4f7fe0);
+    border:none;
+    color:#fff;
+    font-family:'Rajdhani', sans-serif;
+    font-weight:700;
+    font-size:16px;
+    letter-spacing:3px;
+    padding:14px;
+    border-radius:8px;
+    cursor:pointer;
+    text-transform:uppercase;
+    box-shadow:0 0 22px rgba(120,80,220,0.5);
+  }
+  #startBtn:active { filter:brightness(1.15); }
+  #pressStart {
+    font-size:11px;
+    letter-spacing:3px;
+    color:#7ab8ff;
+    text-align:center;
+    animation: blink 1.1s steps(2,start) infinite;
+  }
+
+  #highscoreBox {
+    width:100%;
+    margin-top:2px;
+  }
+  #highscoreTitle {
+    font-size:10px;
+    letter-spacing:2px;
+    color:#b89bff;
+    margin-bottom:6px;
+    text-align:center;
+    font-weight:600;
+  }
+  #highscoreList {
+    list-style:none;
+    font-size:12px;
+    color:#c9c0e0;
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+    max-height:100px;
+    overflow-y:auto;
+  }
+  #highscoreList li {
+    display:flex;
+    justify-content:space-between;
+    padding:3px 8px;
+    background:rgba(255,255,255,0.03);
+    border-radius:4px;
+  }
+  #highscoreList li:nth-child(odd) { background:rgba(255,255,255,0.03); }
+  #highscoreEmpty { text-align:center; color:#6a6a5a; font-size:11px; }
 </style>
 </head>
 <body>
 <div id="stage">
   <h1>⚽ OLIVER'S RETRO CUP '86 ⚽</h1>
   <div id="wrap">
+    <div id="utilBtns">
+      <button class="utilBtn" id="fullscreenBtn">⛶ FULL</button>
+      <button class="utilBtn" id="installBtn">⬇ INSTALL</button>
+    </div>
     <canvas id="game" width="800" height="500"></canvas>
     <div id="scanlines"></div>
     <div id="vignette"></div>
@@ -225,6 +495,60 @@
       <div id="sprintBtn">SPRINT</div>
       <div id="passBtn">PASS</div>
       <div id="shootBtn">SHOOT</div>
+    </div>
+    <div id="startScreen">
+      <div id="startInner">
+        <div id="startEyebrow">★ BUILT DIFFERENT. BORN TO WIN. ★</div>
+        <div id="startTitle">OLIVER'S<span class="accent">RETRO CUP '86</span></div>
+        <div id="startTagline">⚡ ROAD TO GLORY ⚡</div>
+
+        <div id="heroWrap">
+          <img id="heroImg" src="hero.jpg" alt="Player">
+          <div id="heroRankBadge">
+            <div id="cardBadge">👑</div>
+            <div>
+              <div id="cardRank">LEGENDARY PLAYER</div>
+              <div id="cardRankName">ROOKIE</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="playerCard">
+          <label for="playerNameInput">CREATE YOUR LEGEND</label>
+          <input type="text" id="playerNameInput" maxlength="12" placeholder="YOUR NAME" autocomplete="off">
+          <div id="statGrid">
+            <div class="statCell">
+              <div class="statLabel">ATT</div>
+              <div class="statValue" id="statATT">--</div>
+              <div class="statBar"><div class="statBarFill" id="statATTBar"></div></div>
+            </div>
+            <div class="statCell">
+              <div class="statLabel">DEF</div>
+              <div class="statValue" id="statDEF">--</div>
+              <div class="statBar"><div class="statBarFill" id="statDEFBar"></div></div>
+            </div>
+            <div class="statCell">
+              <div class="statLabel">SPD</div>
+              <div class="statValue" id="statSPD">--</div>
+              <div class="statBar"><div class="statBarFill" id="statSPDBar"></div></div>
+            </div>
+            <div class="statCell">
+              <div class="statLabel">SKL</div>
+              <div class="statValue" id="statSKL">--</div>
+              <div class="statBar"><div class="statBarFill" id="statSKLBar"></div></div>
+            </div>
+          </div>
+          <div id="careerLine">CAREER GOALS: <span id="careerGoals">0</span></div>
+        </div>
+
+        <button id="startBtn">⚽ PLAY — KICK OFF YOUR LEGACY</button>
+        <div id="pressStart">PRESS START TO BEGIN YOUR JOURNEY</div>
+
+        <div id="highscoreBox">
+          <div id="highscoreTitle">🏆 TOP SCORES</div>
+          <ol id="highscoreList"></ol>
+        </div>
+      </div>
     </div>
   </div>
   <div id="hud">
@@ -259,6 +583,91 @@ const HALF_LENGTH = 90; // seconds per half (arcade length)
 let paused = false;
 let kickoffTimer = 0;
 let gameOver = false;
+let gameStarted = false;
+let playerName = 'PLAYER';
+
+// ---- Highscore persistence (localStorage) ----
+const HS_KEY = 'retroCup86_highscores';
+const NAME_KEY = 'retroCup86_playerName';
+const CAREER_KEY = 'retroCup86_career';
+function loadHighscores(){
+  try { return JSON.parse(localStorage.getItem(HS_KEY)) || []; }
+  catch(e){ return []; }
+}
+function saveHighscore(name, goals){
+  const list = loadHighscores();
+  list.push({ name, goals, date: Date.now() });
+  list.sort((a,b)=> b.goals - a.goals);
+  const top = list.slice(0,5);
+  try { localStorage.setItem(HS_KEY, JSON.stringify(top)); } catch(e){}
+  return top;
+}
+function renderHighscores(){
+  const list = loadHighscores();
+  const ol = document.getElementById('highscoreList');
+  ol.innerHTML = '';
+  if(list.length===0){
+    ol.innerHTML = '<div id="highscoreEmpty">No matches played yet</div>';
+    return;
+  }
+  list.forEach((entry,i)=>{
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${i+1}. ${entry.name}</span><span>${entry.goals} ⚽</span>`;
+    ol.appendChild(li);
+  });
+}
+
+// ---- Career totals & player "card" (rank + stats), all derived from the chosen name ----
+function loadCareer(){
+  try { return JSON.parse(localStorage.getItem(CAREER_KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function addCareerGoals(name, goals){
+  const career = loadCareer();
+  career[name] = (career[name]||0) + goals;
+  try { localStorage.setItem(CAREER_KEY, JSON.stringify(career)); } catch(e){}
+  return career[name];
+}
+function getCareerGoals(name){
+  const career = loadCareer();
+  return career[name] || 0;
+}
+function rankForGoals(goals){
+  if(goals >= 20) return { name:'LEGEND', badge:'👑' };
+  if(goals >= 10) return { name:'ALL-STAR', badge:'⭐' };
+  if(goals >= 5)  return { name:'PRO', badge:'🔥' };
+  if(goals >= 1)  return { name:'SEMI-PRO', badge:'⚡' };
+  return { name:'ROOKIE', badge:'🌱' };
+}
+function hashString(s){
+  let h = 0;
+  for(let i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) | 0; }
+  return Math.abs(h);
+}
+function statsForName(name){
+  const seed = hashString(name || 'PLAYER');
+  const stat = (offset)=> 62 + ((seed >>> offset) % 38); // range ~62-99
+  return {
+    ATT: stat(2), DEF: stat(6), SPD: stat(10), SKL: stat(14)
+  };
+}
+function updatePlayerCard(){
+  const raw = playerNameInput.value.trim().toUpperCase() || 'PLAYER';
+  const stats = statsForName(raw);
+  const goals = getCareerGoals(raw);
+  const rank = rankForGoals(goals);
+  document.getElementById('statATT').textContent = stats.ATT;
+  document.getElementById('statDEF').textContent = stats.DEF;
+  document.getElementById('statSPD').textContent = stats.SPD;
+  document.getElementById('statSKL').textContent = stats.SKL;
+  document.getElementById('statATTBar').style.width = stats.ATT + '%';
+  document.getElementById('statDEFBar').style.width = stats.DEF + '%';
+  document.getElementById('statSPDBar').style.width = stats.SPD + '%';
+  document.getElementById('statSKLBar').style.width = stats.SKL + '%';
+  document.getElementById('careerGoals').textContent = goals;
+  document.getElementById('cardRankName').textContent = rank.name;
+  document.getElementById('cardBadge').textContent = rank.badge;
+}
 
 // ---- Utility ----
 function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
@@ -344,6 +753,41 @@ function playBounce(){ beep(320,0.04,'sine',0.05); }
 ['keydown','touchstart','mousedown'].forEach(evt=>{
   window.addEventListener(evt, ()=>ensureAudio(), {once:true});
 });
+
+// ---- Fullscreen & Install buttons ----
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+const installBtn = document.getElementById('installBtn');
+const wrapEl = document.getElementById('wrap');
+
+fullscreenBtn.addEventListener('click', ()=>{
+  if(!document.fullscreenElement){
+    (wrapEl.requestFullscreen || wrapEl.webkitRequestFullscreen || function(){}).call(wrapEl);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+  }
+});
+
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installBtn.style.display = 'inline-block';
+});
+installBtn.addEventListener('click', async ()=>{
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    installBtn.style.display = 'none';
+  } else if(/iphone|ipad|ipod/i.test(navigator.userAgent)){
+    showMsg('Tap Share, then "Add to Home Screen"', 3000);
+  }
+});
+// On iOS there's no beforeinstallprompt — show the install button so people
+// discover the manual "Add to Home Screen" instruction via the message above.
+if(/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone){
+  installBtn.style.display = 'inline-block';
+}
 
 // ---- Input ----
 const keys = {};
@@ -696,7 +1140,7 @@ function showMsg(text, dur){
 }
 
 function updateScoreboard(){
-  scoreEl.textContent = `BLUE ${score.blue} — ${score.red} RED`;
+  scoreEl.textContent = `${playerName} ${score.blue} — ${score.red} RED`;
 }
 
 // ---- Player possession & controls ----
@@ -926,7 +1370,10 @@ function tick(now){
       setTimeout(()=>resetKickoff(),150);
     } else if(matchTime >= HALF_LENGTH && half===2){
       gameOver = true;
-      showMsg('FULL TIME! ' + (score.blue>score.red?'BLUE WINS':score.red>score.blue?'RED WINS':'DRAW'), 5000);
+      showMsg('FULL TIME! ' + (score.blue>score.red?playerName+' WINS':score.red>score.blue?'RED WINS':'DRAW'), 5000);
+      saveHighscore(playerName, score.blue);
+      addCareerGoals(playerName, score.blue);
+      renderHighscores();
     }
 
     updateAuto();
@@ -956,10 +1403,38 @@ function tick(now){
   requestAnimationFrame(tick);
 }
 
-updateScoreboard();
-showMsg('KICK OFF!', 1500);
-resetKickoff();
-requestAnimationFrame(tick);
+// ---- Start screen wiring ----
+const startScreen = document.getElementById('startScreen');
+const playerNameInput = document.getElementById('playerNameInput');
+const startBtn = document.getElementById('startBtn');
+
+try {
+  const savedName = localStorage.getItem(NAME_KEY);
+  if(savedName) playerNameInput.value = savedName;
+} catch(e){}
+renderHighscores();
+updatePlayerCard();
+playerNameInput.addEventListener('input', updatePlayerCard);
+
+function startGame(){
+  if(gameStarted) return;
+  gameStarted = true;
+  const raw = playerNameInput.value.trim().toUpperCase();
+  playerName = (raw || 'PLAYER').slice(0,12);
+  try { localStorage.setItem(NAME_KEY, playerName); } catch(e){}
+  startScreen.style.display = 'none';
+  ensureAudio();
+  if(isTouchDevice && document.fullscreenElement === null){
+    (wrapEl.requestFullscreen || wrapEl.webkitRequestFullscreen || function(){}).call(wrapEl).catch(()=>{});
+  }
+  updateScoreboard();
+  showMsg('KICK OFF!', 1500);
+  resetKickoff();
+  requestAnimationFrame(tick);
+}
+
+startBtn.addEventListener('click', startGame);
+playerNameInput.addEventListener('keydown', e=>{ if(e.key==='Enter') startGame(); });
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
