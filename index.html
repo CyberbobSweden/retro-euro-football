@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>RETRO CUP '86 — European Football</title>
+<title>OLIVER'S RETRO CUP '86 — European Football</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body {
@@ -153,7 +153,7 @@
 </head>
 <body>
 <div id="stage">
-  <h1>⚽ RETRO CUP '86 ⚽</h1>
+  <h1>⚽ OLIVER'S RETRO CUP '86 ⚽</h1>
   <div id="wrap">
     <canvas id="game" width="800" height="500"></canvas>
     <div id="scanlines"></div>
@@ -169,7 +169,7 @@
     <span id="clock">00:00</span>
     <span id="period">1ST HALF</span>
   </div>
-  <div id="tip">ARROWS / WASD move &nbsp;·&nbsp; SPACE shoot/pass (hold to power up) &nbsp;·&nbsp; auto-switches to nearest blue player</div>
+  <div id="tip">ARROWS / WASD move &nbsp;·&nbsp; SPACE shoot/pass (hold to power up) &nbsp;·&nbsp; run into an opponent with the ball to tackle &nbsp;·&nbsp; auto-switches to nearest blue player</div>
 </div>
 
 <script>
@@ -205,14 +205,17 @@ function lerp(a,b,t){ return a+(b-a)*t; }
 // ---- Ball ----
 const ball = {
   x: W/2, y: H/2, vx:0, vy:0, r:6,
-  owner:null
+  owner:null,
+  deniedPlayer:null, deniedTimer:0
 };
 
 function resetKickoff(dir){
   ball.x = W/2; ball.y = H/2; ball.vx=0; ball.vy=0; ball.owner=null;
+  ball.deniedPlayer=null; ball.deniedTimer=0;
   blueTeam.forEach(p=>p.reset());
   redTeam.forEach(p=>p.reset());
   kickoffTimer = 60;
+  playWhistle();
 }
 
 // ---- Players ----
@@ -222,7 +225,9 @@ function makePlayer(team, homeX, homeY, isKeeper){
     x: homeX, y: homeY, vx:0, vy:0,
     r: isKeeper?9:8,
     speed: isKeeper? 1.6 : (2.1 + Math.random()*0.4),
-    reset(){ this.x=this.homeX; this.y=this.homeY; this.vx=0; this.vy=0; }
+    tackleCd: 0,
+    passCd: 0,
+    reset(){ this.x=this.homeX; this.y=this.homeY; this.vx=0; this.vy=0; this.tackleCd=0; this.passCd=0; }
   };
 }
 
@@ -243,6 +248,39 @@ const redTeam = [
 ];
 
 let controlled = blueTeam[2];
+
+// ---- Retro sound engine (synthesized, no external files) ----
+let audioCtx = null;
+function ensureAudio(){
+  if(!audioCtx){
+    try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }
+    catch(e){ return null; }
+  }
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function beep(freq, duration, type='square', gain=0.14, delay=0){
+  const ctx2 = ensureAudio();
+  if(!ctx2) return;
+  const t0 = ctx2.currentTime + delay;
+  const osc = ctx2.createOscillator();
+  const g = ctx2.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(gain, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0+duration);
+  osc.connect(g); g.connect(ctx2.destination);
+  osc.start(t0); osc.stop(t0+duration+0.02);
+}
+function playKick(){ beep(240,0.07,'square',0.12); beep(120,0.09,'square',0.08,0.02); }
+function playWhistle(){ beep(1900,0.22,'sine',0.09); beep(1900,0.22,'sine',0.09,0.3); }
+function playGoal(){ [660,880,1046,1318].forEach((f,i)=>beep(f,0.16,'triangle',0.13,i*0.11)); }
+function playTackle(){ beep(85,0.09,'sawtooth',0.16); }
+function playBounce(){ beep(320,0.04,'sine',0.05); }
+// unlock audio on first interaction (needed on mobile)
+['keydown','touchstart','mousedown'].forEach(evt=>{
+  window.addEventListener(evt, ()=>ensureAudio(), {once:true});
+});
 
 // ---- Input ----
 const keys = {};
@@ -419,6 +457,84 @@ function outfieldAI(p, team, opponentGoalX){
   }
 }
 
+// ---- Tackling: contest the ball off an opponent who has possession ----
+const tackleFlashes = [];
+function updateTackles(){
+  if(!ball.owner) return;
+  const owner = ball.owner;
+  const opponents = owner.team==='blue' ? redTeam : blueTeam;
+  for(const p of opponents){
+    if(p.tackleCd > 0){ p.tackleCd--; continue; }
+    const d = dist(p, owner);
+    if(d < p.r + owner.r + 5){
+      const isHuman = (p === controlled);
+      const chance = isHuman ? 0.11 : 0.045; // human wins duels a bit more often than AI
+      if(Math.random() < chance){
+        ball.owner = null;
+        ball.deniedPlayer = owner;
+        ball.deniedTimer = 22;
+        const angle = Math.atan2(owner.y - p.y, owner.x - p.x) + (Math.random()-0.5)*0.6;
+        const kick = 2 + Math.random()*1.4;
+        ball.vx = Math.cos(angle)*kick;
+        ball.vy = Math.sin(angle)*kick;
+        owner.tackleCd = 30;
+        p.tackleCd = 18;
+        tackleFlashes.push({x:(owner.x+p.x)/2, y:(owner.y+p.y)/2, t:14});
+        playTackle();
+      } else {
+        p.tackleCd = 10; // brief pause between duel attempts, avoids instant re-rolls
+      }
+    }
+  }
+}
+
+// ---- AI passing & shooting (adds a bit of "intelligence" beyond running straight at the ball) ----
+function aiDecision(p, team, oppTeam, opponentGoalX){
+  if(p === controlled || p.isKeeper) return;
+  if(ball.owner !== p) return;
+  if(p.passCd > 0){ p.passCd--; return; }
+
+  const distToGoal = Math.abs(opponentGoalX - p.x);
+  // Shoot if close to goal, roughly facing it, with modest randomness (keeps it beatable)
+  if(distToGoal < 175 && Math.abs(p.y - H/2) < 130){
+    if(Math.random() < 0.028){
+      const targetY = H/2 + (Math.random()-0.5)*60;
+      const dx = opponentGoalX - p.x, dy = targetY - p.y;
+      const dd = Math.hypot(dx,dy) || 1;
+      const power = 9.5;
+      ball.vx = (dx/dd)*power; ball.vy = (dy/dd)*power;
+      ball.owner = null;
+      p.passCd = 40;
+      playKick();
+      return;
+    }
+  }
+
+  // Pass under pressure: find nearest opponent, and if they're closing in, look for a teammate
+  let nearestOpp = null, nd = Infinity;
+  for(const o of oppTeam){ const d = dist(o,p); if(d<nd){ nd=d; nearestOpp=o; } }
+  if(nd < 48){
+    let target = null, bestScore = -Infinity;
+    for(const t of team){
+      if(t === p || t.isKeeper) continue;
+      const advancement = (team===blueTeam) ? (t.x - p.x) : (p.x - t.x);
+      const d = dist(t, p);
+      if(d > 240 || d < 20) continue;
+      const score = advancement - d*0.25;
+      if(score > bestScore){ bestScore = score; target = t; }
+    }
+    if(target){
+      const dx = target.x - p.x, dy = target.y - p.y;
+      const dd = Math.hypot(dx,dy) || 1;
+      const power = 6.5;
+      ball.vx = (dx/dd)*power; ball.vy = (dy/dd)*power;
+      ball.owner = null;
+      p.passCd = 35;
+      playKick();
+    }
+  }
+}
+
 // ---- Physics / interactions ----
 function circlesOverlap(a,b, extra=0){
   return dist(a,b) < (a.r+b.r+extra);
@@ -457,6 +573,7 @@ function scoreGoal(team){
   updateScoreboard();
   showMsg((team==='blue'?'BLUE':'RED') + ' SCORES! ⚽', 1800);
   gameOver = false;
+  playGoal();
   setTimeout(()=> resetKickoff(), 200);
 }
 
@@ -485,9 +602,12 @@ function handlePossession(){
     ball.vx = 0; ball.vy = 0;
     if(dist(p, {x:targetX,y:targetY}) > 30) ball.owner=null;
   } else {
+    if(ball.deniedTimer > 0) ball.deniedTimer--;
     for(const p of allPlayers){
+      if(p === ball.deniedPlayer && ball.deniedTimer > 0) continue;
       if(circlesOverlap(p, ball, 2) && Math.hypot(ball.vx,ball.vy) < 6){
         ball.owner = p;
+        if(ball.deniedPlayer && p!==ball.deniedPlayer) ball.deniedPlayer = null;
         break;
       }
     }
@@ -515,6 +635,8 @@ function updatePlayerControl(){
       ball.vx = facing.dx*power;
       ball.vy = facing.dy*power;
       ball.owner = null;
+      ball.deniedPlayer = null;
+      playKick();
     }
     shootCharge = 0;
   }
@@ -647,6 +769,20 @@ function drawKickoffOverlay(){
   }
 }
 
+function drawTackleFlashes(){
+  for(let i=tackleFlashes.length-1;i>=0;i--){
+    const f = tackleFlashes[i];
+    f.t--;
+    if(f.t<=0){ tackleFlashes.splice(i,1); continue; }
+    const alpha = f.t/14;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, (14-f.t)*1.6, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(242,210,75,${alpha})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
 // ---- Main loop ----
 let lastTick = performance.now();
 let simSeconds = 0;
@@ -683,6 +819,9 @@ function tick(now){
     updatePlayerControl();
     blueTeam.forEach(p=>{ if(p!==controlled) outfieldAI(p, blueTeam, pitch.x+pitch.w); });
     redTeam.forEach(p=> outfieldAI(p, redTeam, pitch.x));
+    blueTeam.forEach(p=> aiDecision(p, blueTeam, redTeam, pitch.x+pitch.w));
+    redTeam.forEach(p=> aiDecision(p, redTeam, blueTeam, pitch.x));
+    updateTackles();
     resolvePlayerCollisions();
     clampAllToPitch();
     handlePossession();
@@ -697,6 +836,7 @@ function tick(now){
   blueTeam.concat(redTeam).forEach(drawPlayer);
   drawBall();
   drawShootMeter();
+  drawTackleFlashes();
   drawKickoffOverlay();
 
   requestAnimationFrame(tick);
