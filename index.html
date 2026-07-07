@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>OLIVER'S RETRO CUP '86 — European Football</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a5c2a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Retro Cup '86">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png" type="image/png">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body {
@@ -120,19 +128,20 @@
   }
   #shootBtn {
     position:absolute;
-    right:5%;
-    bottom:8%;
-    width:20vw;
-    height:20vw;
-    max-width:92px;
-    max-height:92px;
-    min-width:64px;
-    min-height:64px;
+    right:4%;
+    bottom:32%;
+    width:19vw;
+    height:19vw;
+    max-width:88px;
+    max-height:88px;
+    min-width:60px;
+    min-height:60px;
     border-radius:50%;
-    background:rgba(214,61,61,0.28);
-    border:2px solid rgba(232,232,208,0.5);
+    background:rgba(214,61,61,0.32);
+    border:2px solid rgba(232,232,208,0.55);
     color:#e8e8d0;
     font-family:'Courier New', monospace;
+    font-weight:bold;
     font-size:11px;
     letter-spacing:1px;
     display:flex; align-items:center; justify-content:center;
@@ -140,8 +149,60 @@
     touch-action:none;
   }
   #shootBtn.active {
-    background:rgba(242,210,75,0.5);
+    background:rgba(242,210,75,0.55);
     border-color:#f2d24b;
+  }
+  #passBtn {
+    position:absolute;
+    right:4%;
+    bottom:6%;
+    width:17vw;
+    height:17vw;
+    max-width:78px;
+    max-height:78px;
+    min-width:54px;
+    min-height:54px;
+    border-radius:50%;
+    background:rgba(61,150,150,0.32);
+    border:2px solid rgba(232,232,208,0.55);
+    color:#e8e8d0;
+    font-family:'Courier New', monospace;
+    font-weight:bold;
+    font-size:10px;
+    letter-spacing:1px;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:auto;
+    touch-action:none;
+  }
+  #passBtn.active {
+    background:rgba(120,220,220,0.55);
+    border-color:#7adcdc;
+  }
+  #sprintBtn {
+    position:absolute;
+    right:25%;
+    bottom:4%;
+    width:15vw;
+    height:15vw;
+    max-width:68px;
+    max-height:68px;
+    min-width:48px;
+    min-height:48px;
+    border-radius:50%;
+    background:rgba(80,180,90,0.28);
+    border:2px solid rgba(232,232,208,0.5);
+    color:#e8e8d0;
+    font-family:'Courier New', monospace;
+    font-weight:bold;
+    font-size:9px;
+    letter-spacing:1px;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:auto;
+    touch-action:none;
+  }
+  #sprintBtn.active {
+    background:rgba(120,230,130,0.55);
+    border-color:#7ae68a;
   }
 
   @media (max-width:520px){
@@ -161,6 +222,8 @@
     <div id="msg"></div>
     <div id="touchControls">
       <div id="joyBase"><div id="joyKnob"></div></div>
+      <div id="sprintBtn">SPRINT</div>
+      <div id="passBtn">PASS</div>
       <div id="shootBtn">SHOOT</div>
     </div>
   </div>
@@ -169,7 +232,7 @@
     <span id="clock">00:00</span>
     <span id="period">1ST HALF</span>
   </div>
-  <div id="tip">ARROWS / WASD move &nbsp;·&nbsp; SPACE shoot/pass (hold to power up) &nbsp;·&nbsp; run into an opponent with the ball to tackle &nbsp;·&nbsp; auto-switches to nearest blue player</div>
+  <div id="tip">ARROWS/WASD move &nbsp;·&nbsp; SPACE shoot (hold to power up) &nbsp;·&nbsp; Q quick pass &nbsp;·&nbsp; SHIFT sprint &nbsp;·&nbsp; run into an opponent with the ball to tackle</div>
 </div>
 
 <script>
@@ -381,6 +444,46 @@ shootBtn.addEventListener('touchend', e=>{
 shootBtn.addEventListener('mousedown', ()=>{ touchShoot = true; shootBtn.classList.add('active'); });
 window.addEventListener('mouseup', ()=>{ if(touchShoot){ touchShoot=false; shootBtn.classList.remove('active'); } });
 
+// SPRINT — hold to boost speed (works like touchMove modifier)
+let touchSprint = false;
+const sprintBtn = document.getElementById('sprintBtn');
+sprintBtn.addEventListener('touchstart', e=>{ e.preventDefault(); touchSprint=true; sprintBtn.classList.add('active'); }, {passive:false});
+sprintBtn.addEventListener('touchend', e=>{ e.preventDefault(); touchSprint=false; sprintBtn.classList.remove('active'); }, {passive:false});
+sprintBtn.addEventListener('mousedown', ()=>{ touchSprint=true; sprintBtn.classList.add('active'); });
+window.addEventListener('mouseup', ()=>{ if(touchSprint){ touchSprint=false; sprintBtn.classList.remove('active'); } });
+
+// PASS — instant quick pass to the best-placed teammate (no charge-up, unlike SHOOT)
+const passBtn = document.getElementById('passBtn');
+function doQuickPass(){
+  const p = controlled;
+  if(!p || ball.owner!==p || kickoffTimer>0) return;
+  const team = p.team==='blue' ? blueTeam : redTeam;
+  let target=null, bestScore=-Infinity;
+  for(const t of team){
+    if(t===p) continue;
+    const facing = p._facing || {dx:(p.team==='blue'?1:-1), dy:0};
+    const dx=t.x-p.x, dy=t.y-p.y;
+    const d = Math.hypot(dx,dy) || 1;
+    if(d>280) continue;
+    const dot = (dx/d)*facing.dx + (dy/d)*facing.dy; // prefer teammates ahead of facing direction
+    const score = dot*40 - d*0.12;
+    if(score>bestScore){ bestScore=score; target=t; }
+  }
+  if(target){
+    const dx=target.x-p.x, dy=target.y-p.y;
+    const d=Math.hypot(dx,dy)||1;
+    const power = 7.5;
+    ball.vx=(dx/d)*power; ball.vy=(dy/d)*power;
+    ball.owner=null;
+    ball.deniedPlayer=null;
+    playKick();
+  }
+}
+passBtn.addEventListener('touchstart', e=>{ e.preventDefault(); passBtn.classList.add('active'); doQuickPass(); }, {passive:false});
+passBtn.addEventListener('touchend', e=>{ e.preventDefault(); passBtn.classList.remove('active'); }, {passive:false});
+passBtn.addEventListener('mousedown', ()=>{ passBtn.classList.add('active'); doQuickPass(); });
+window.addEventListener('mouseup', ()=>{ passBtn.classList.remove('active'); });
+
 document.getElementById('wrap').addEventListener('touchmove', e=>{ e.preventDefault(); }, {passive:false});
 
 function getInputVec(){
@@ -400,6 +503,13 @@ function getInputVec(){
 function isShootActive(){
   return keys[' '] || touchShoot;
 }
+function isSprintActive(){
+  return keys['shift'] || touchSprint;
+}
+// keyboard quick-pass on 'q' (edge-triggered so it fires once per press)
+window.addEventListener('keydown', e=>{
+  if(e.key.toLowerCase()==='q') doQuickPass();
+});
 
 // ---- AI ----
 function nearestToBall(team){
@@ -466,23 +576,24 @@ function updateTackles(){
   for(const p of opponents){
     if(p.tackleCd > 0){ p.tackleCd--; continue; }
     const d = dist(p, owner);
-    if(d < p.r + owner.r + 5){
+    if(d < p.r + owner.r + 6){
       const isHuman = (p === controlled);
-      const chance = isHuman ? 0.11 : 0.045; // human wins duels a bit more often than AI
+      let chance = isHuman ? 0.17 : 0.05;
+      if(isHuman && p._sprinting) chance += 0.05; // sprinting into a challenge wins it more often
       if(Math.random() < chance){
         ball.owner = null;
         ball.deniedPlayer = owner;
-        ball.deniedTimer = 22;
+        ball.deniedTimer = 20;
         const angle = Math.atan2(owner.y - p.y, owner.x - p.x) + (Math.random()-0.5)*0.6;
         const kick = 2 + Math.random()*1.4;
         ball.vx = Math.cos(angle)*kick;
         ball.vy = Math.sin(angle)*kick;
         owner.tackleCd = 30;
-        p.tackleCd = 18;
+        p.tackleCd = 14;
         tackleFlashes.push({x:(owner.x+p.x)/2, y:(owner.y+p.y)/2, t:14});
         playTackle();
       } else {
-        p.tackleCd = 10; // brief pause between duel attempts, avoids instant re-rolls
+        p.tackleCd = 6; // short pause between duel rolls so it feels responsive, not spammy
       }
     }
   }
@@ -618,11 +729,14 @@ function updatePlayerControl(){
   const p = controlled;
   if(!p || kickoffTimer>0) { shootCharge=0; return; }
   const {dx,dy} = getInputVec();
+  const sprinting = isSprintActive();
+  const moveSpeed = p.speed * (sprinting ? 1.55 : 1.15);
   if(dx!==0||dy!==0){
-    p.x += dx*p.speed*1.15;
-    p.y += dy*p.speed*1.15;
+    p.x += dx*moveSpeed;
+    p.y += dy*moveSpeed;
     p._facing = {dx,dy};
   }
+  p._sprinting = sprinting;
   p.x = clamp(p.x, pitch.x+p.r, pitch.x+pitch.w-p.r);
   p.y = clamp(p.y, pitch.y+p.r, pitch.y+pitch.h-p.r);
 
@@ -846,6 +960,12 @@ updateScoreboard();
 showMsg('KICK OFF!', 1500);
 resetKickoff();
 requestAnimationFrame(tick);
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{ /* ignore if unsupported/offline */ });
+  });
+}
 })();
 </script>
 </body>
