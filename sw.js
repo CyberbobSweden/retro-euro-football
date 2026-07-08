@@ -1,11 +1,16 @@
-const CACHE_NAME = 'oliver-retro-cup-v2'; // bumped to force old (buggy) caches to clear out
+const CACHE_NAME = 'oliver-retro-cup-v3'; // bumped to force old (buggy) caches to clear out
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
-  './hero.jpg'
+  './hero.jpg',
+  './sprites/blue_player.png',
+  './sprites/red_player.png',
+  './sprites/blue_keeper.png',
+  './sprites/red_keeper.png',
+  './sprites/ball.png'
 ];
 
 self.addEventListener('install', (event) => {

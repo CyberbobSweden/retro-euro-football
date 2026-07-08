@@ -723,7 +723,7 @@
           <div id="achievementCase"></div>
         </div>
 
-        <div id="versionTag">v1.8.0</div>
+        <div id="versionTag">v1.9.0</div>
       </div>
     </div>
   </div>
@@ -731,7 +731,7 @@
     <span id="scoreline">BLUE 0 — 0 RED</span>
     <span id="clock">00:00</span>
     <span id="period">1ST HALF</span>
-    <span id="versionTagHud">v1.8.0</span>
+    <span id="versionTagHud">v1.9.0</span>
   </div>
   <div id="tip">ARROWS/WASD move &nbsp;·&nbsp; SPACE shoot (hold to power up) &nbsp;·&nbsp; Q pass (hold for a lob) &nbsp;·&nbsp; SHIFT sprint &nbsp;·&nbsp; run into an opponent with the ball to tackle</div>
 </div>
@@ -739,11 +739,25 @@
 <script>
 (function(){
 const canvas = document.getElementById('game');
-const GAME_VERSION = 'v1.8.0';
+const GAME_VERSION = 'v1.9.0';
 document.getElementById('versionTag').textContent = GAME_VERSION;
 document.getElementById('versionTagHud').textContent = GAME_VERSION;
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
+
+// Air Football uses a set of neon sprite icons instead of the pixel-art kits (Classic mode
+// keeps the original procedural drawing). Loaded once, drawn rotated to match facing direction.
+const airSprites = {};
+let airSpritesReady = 0;
+['blue_player','red_player','blue_keeper','red_keeper','ball'].forEach(name=>{
+  const img = new Image();
+  img.onload = ()=>{ airSpritesReady++; };
+  img.onerror = ()=>{ /* fall back to procedural drawing silently if missing */ };
+  img.src = `sprites/${name}.png`;
+  airSprites[name] = img;
+});
+function airSpritesLoaded(){ return airSpritesReady >= 5; }
+
 const msgEl = document.getElementById('msg');
 const scoreEl = document.getElementById('scoreline');
 const clockEl = document.getElementById('clock');
@@ -1060,8 +1074,9 @@ function makePlayer(team, homeX, homeY, isKeeper){
     speed: baseSpeed,
     tackleCd: 0,
     passCd: 0,
+    holdTime: 0,
     active: true,
-    reset(){ this.x=this.homeX; this.y=this.homeY; this.vx=0; this.vy=0; this.tackleCd=0; this.passCd=0; }
+    reset(){ this.x=this.homeX; this.y=this.homeY; this.vx=0; this.vy=0; this.tackleCd=0; this.passCd=0; this.holdTime=0; }
   };
 }
 
@@ -1390,9 +1405,13 @@ function keeperAI(keeper, goalX){
 function outfieldAI(p, team, opponentGoalX){
   if(p.isKeeper) return keeperAI(p, opponentGoalX);
   const hasBall = ball.owner===p;
+  const teammateKeeperHasBall = ball.owner && ball.owner.isKeeper && ball.owner.team===p.team;
   if(hasBall){
     // dribble toward opponent goal
     moveTowards(p, opponentGoalX, H/2 + (p.homeY-H/2)*0.3, p.speed);
+  } else if(teammateKeeperHasBall){
+    // give your own keeper room to work instead of crowding them — hold position, ready to receive
+    moveTowards(p, p.homeX, p.homeY, p.speed*0.7);
   } else {
     const near = nearestToBall(team.filter(q=>!q.isKeeper && q.active));
     if(near===p){
@@ -1626,6 +1645,41 @@ function handlePossession(){
   }
 }
 
+// Keepers never decide to pass/shoot on their own (aiDecision skips them, and they're
+// never human-controlled), so without this they'd hold the ball forever once caught —
+// especially fatal in Air Football where tackling is off and nobody can dispossess them.
+function updateKeeperDistribution(){
+  [blueTeam[0], redTeam[0]].forEach(keeper=>{
+    if(!keeper.active) return;
+    if(ball.owner === keeper){
+      keeper.holdTime = (keeper.holdTime||0) + 1;
+      if(keeper.holdTime > 32){
+        const forwardX = keeper.team==='blue' ? 1 : -1;
+        const team = keeper.team==='blue' ? blueTeam : redTeam;
+        let target = null, bestScore = -Infinity;
+        for(const t of team){
+          if(t===keeper || t.isKeeper || !t.active) continue;
+          const advancement = forwardX*(t.x-keeper.x);
+          if(advancement > bestScore){ bestScore = advancement; target = t; }
+        }
+        let dx, dy;
+        if(target){ dx = target.x-keeper.x; dy = target.y-keeper.y; }
+        else { dx = forwardX; dy = 0; }
+        const dd = Math.hypot(dx,dy) || 1;
+        const power = selectedMode==='air' ? 10 : 8;
+        ball.vx = (dx/dd)*power;
+        ball.vy = (dy/dd)*power;
+        ball.owner = null;
+        ball.deniedPlayer = null;
+        keeper.holdTime = 0;
+        playKick();
+      }
+    } else {
+      keeper.holdTime = 0;
+    }
+  });
+}
+
 function updatePlayerControl(){
   const p = controlled;
   if(!p || kickoffTimer>0) { shootCharge=0; return; }
@@ -1751,6 +1805,10 @@ function drawPitch(){
 }
 
 function drawPlayer(p){
+  if(selectedMode === 'air' && airSpritesLoaded()){
+    drawPlayerSprite(p);
+    return;
+  }
   const kits = {
     blue: { shirt:'#3d6bd6', shirtDark:'#233f8a', shorts:'#16225c' },
     red:  { shirt:selectedOpponent.shirt, shirtDark:selectedOpponent.shirtDark, shorts:selectedOpponent.shorts }
@@ -1821,6 +1879,50 @@ function drawPlayer(p){
   ctx.restore();
 }
 
+// Air Football rendering: neon sprite icons, rotated to face the direction of travel.
+function drawPlayerSprite(p){
+  const key = p.isKeeper ? (p.team+'_keeper') : (p.team+'_player');
+  const img = airSprites[key];
+  if(!img || !img.complete || img.naturalWidth===0){ return; }
+
+  ctx.save();
+  ctx.translate(p.x, p.y);
+
+  // ground shadow
+  ctx.beginPath();
+  ctx.ellipse(0, p.r*0.95, p.r*0.9, p.r*0.35, 0, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fill();
+
+  // rotate to face the direction of travel — sprites are drawn facing "up" by default
+  const facing = p._facing || {dx: p.team==='blue'?1:-1, dy:0};
+  if(facing.dx!==0 || facing.dy!==0){
+    ctx.rotate(Math.atan2(facing.dy, facing.dx) + Math.PI/2);
+  }
+
+  const drawSize = p.r * (p.isKeeper ? 3.6 : 3.1);
+  ctx.drawImage(img, -drawSize/2, -drawSize/2, drawSize, drawSize);
+  ctx.restore();
+
+  // star crown + controlled ring drawn unrotated, in normal screen orientation
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  if(p.isStar){
+    ctx.font = `${Math.round(p.r*1.2)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('👑', 0, -p.r*1.9);
+  }
+  if(p===controlled){
+    ctx.beginPath();
+    ctx.arc(0, 0, p.r+7, 0, Math.PI*2);
+    ctx.strokeStyle = '#f2d24b';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawBall(){
   ctx.save();
   ctx.translate(ball.x, ball.y);
@@ -1833,13 +1935,19 @@ function drawBall(){
   // the ball itself is drawn offset upward by its height, and slightly bigger for depth
   const liftScale = 1 + ball.z/60;
   ctx.translate(0, -ball.z);
-  ctx.beginPath();
-  ctx.arc(0,0,ball.r*liftScale,0,Math.PI*2);
-  ctx.fillStyle = '#f2f2e8';
-  ctx.fill();
-  ctx.strokeStyle = '#333';
-  ctx.lineWidth=1;
-  ctx.stroke();
+
+  if(selectedMode === 'air' && airSpritesLoaded() && airSprites.ball.complete && airSprites.ball.naturalWidth>0){
+    const size = ball.r*2.6*liftScale;
+    ctx.drawImage(airSprites.ball, -size/2, -size/2, size, size);
+  } else {
+    ctx.beginPath();
+    ctx.arc(0,0,ball.r*liftScale,0,Math.PI*2);
+    ctx.fillStyle = '#f2f2e8';
+    ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth=1;
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -1934,6 +2042,7 @@ function tick(now){
       resolvePlayerCollisions();
       clampAllToPitch();
       handlePossession();
+      updateKeeperDistribution();
       updateBall();
     }
     updateConfetti();
