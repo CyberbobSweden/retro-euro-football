@@ -1,10 +1,11 @@
-const CACHE_NAME = 'oliver-retro-cup-v1';
+const CACHE_NAME = 'oliver-retro-cup-v2'; // bumped to force old (buggy) caches to clear out
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './hero.jpg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -23,16 +24,16 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network-first: always try to fetch the latest version when online (so updates show up
+// immediately), only falling back to the cached copy if the network request fails (offline play).
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((response) => {
-        if (response && response.status === 200 && event.request.method === 'GET') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => cached);
-    })
+    fetch(event.request).then((response) => {
+      if (response && response.status === 200 && event.request.method === 'GET') {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+      }
+      return response;
+    }).catch(() => caches.match(event.request))
   );
 });
