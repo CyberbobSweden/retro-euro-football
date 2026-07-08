@@ -263,6 +263,8 @@
     display:flex; align-items:center; justify-content:center;
     z-index:30;
     overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    touch-action:pan-y;
     padding:14px;
     font-family:'Rajdhani', 'Courier New', monospace;
   }
@@ -501,6 +503,14 @@
     letter-spacing:0.5px;
     min-height:14px;
   }
+  #modeBlurb {
+    font-size:10px;
+    color:#a898d0;
+    text-align:center;
+    letter-spacing:0.5px;
+    min-height:14px;
+    margin-bottom:2px;
+  }
 
   #startBtn {
     width:100%;
@@ -683,6 +693,12 @@
         </div>
 
         <div id="selectBox">
+          <label>GAME MODE</label>
+          <div class="pillRow" id="modeRow">
+            <button class="pillBtn" data-mode="classic">⚽ CLASSIC</button>
+            <button class="pillBtn" data-mode="air">🏒 AIR FOOTBALL</button>
+          </div>
+          <div id="modeBlurb"></div>
           <label>DIFFICULTY</label>
           <div class="pillRow" id="difficultyRow">
             <button class="pillBtn" data-difficulty="easy">EASY</button>
@@ -707,7 +723,7 @@
           <div id="achievementCase"></div>
         </div>
 
-        <div id="versionTag">v1.7.2</div>
+        <div id="versionTag">v1.8.0</div>
       </div>
     </div>
   </div>
@@ -715,7 +731,7 @@
     <span id="scoreline">BLUE 0 — 0 RED</span>
     <span id="clock">00:00</span>
     <span id="period">1ST HALF</span>
-    <span id="versionTagHud">v1.7.2</span>
+    <span id="versionTagHud">v1.8.0</span>
   </div>
   <div id="tip">ARROWS/WASD move &nbsp;·&nbsp; SPACE shoot (hold to power up) &nbsp;·&nbsp; Q pass (hold for a lob) &nbsp;·&nbsp; SHIFT sprint &nbsp;·&nbsp; run into an opponent with the ball to tackle</div>
 </div>
@@ -723,7 +739,7 @@
 <script>
 (function(){
 const canvas = document.getElementById('game');
-const GAME_VERSION = 'v1.7.2';
+const GAME_VERSION = 'v1.8.0';
 document.getElementById('versionTag').textContent = GAME_VERSION;
 document.getElementById('versionTagHud').textContent = GAME_VERSION;
 const ctx = canvas.getContext('2d');
@@ -935,11 +951,22 @@ function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 function lerp(a,b,t){ return a+(b-a)*t; }
 
 // ---- Camera: zoom in and follow the action instead of showing the whole pitch at once ----
-const ZOOM = 1.42;
 let camera = { x: W/2, y: H/2 };
 let shakeAmount = 0;
 function triggerShake(amount){ shakeAmount = Math.max(shakeAmount, amount); }
 function updateCamera(){
+  if(selectedMode === 'air'){
+    camera.x = lerp(camera.x, W/2, 0.15);
+    camera.y = lerp(camera.y, H/2, 0.15);
+    if(shakeAmount > 0.05){
+      camera.x += (Math.random()-0.5) * shakeAmount;
+      camera.y += (Math.random()-0.5) * shakeAmount;
+      shakeAmount *= 0.85;
+    } else {
+      shakeAmount = 0;
+    }
+    return;
+  }
   const focusP = controlled || ball;
   // mostly follow the ball, pulled a bit toward your player, with a slight lead in the
   // direction the ball is travelling so you can see where it's heading
@@ -1033,6 +1060,7 @@ function makePlayer(team, homeX, homeY, isKeeper){
     speed: baseSpeed,
     tackleCd: 0,
     passCd: 0,
+    active: true,
     reset(){ this.x=this.homeX; this.y=this.homeY; this.vx=0; this.vy=0; this.tackleCd=0; this.passCd=0; }
   };
 }
@@ -1050,6 +1078,8 @@ const DIFFICULTIES = {
 };
 let selectedOpponent = OPPONENTS[0];
 let selectedDifficulty = 'normal';
+let selectedMode = 'classic'; // 'classic' or 'air'
+let ZOOM = 1.42; // mutable now — Air Football shows the whole pitch (no zoom)
 
 // Blue team (player-controlled, auto-switch) - 4 outfield + keeper, attacking right->left setup mirrored
 const blueTeam = [
@@ -1253,7 +1283,7 @@ function findPassTarget(p){
   const team = p.team==='blue' ? blueTeam : redTeam;
   let target=null, bestScore=-Infinity;
   for(const t of team){
-    if(t===p) continue;
+    if(t===p || !t.active) continue;
     const facing = p._facing || {dx:(p.team==='blue'?1:-1), dy:0};
     const dx=t.x-p.x, dy=t.y-p.y;
     const d = Math.hypot(dx,dy) || 1;
@@ -1290,7 +1320,10 @@ passBtn.addEventListener('touchend', e=>{ e.preventDefault(); touchPass=false; p
 passBtn.addEventListener('mousedown', ()=>{ touchPass=true; passBtn.classList.add('active'); });
 window.addEventListener('mouseup', ()=>{ touchPass=false; passBtn.classList.remove('active'); });
 
-document.getElementById('wrap').addEventListener('touchmove', e=>{ e.preventDefault(); }, {passive:false});
+document.getElementById('wrap').addEventListener('touchmove', e=>{
+  if(!gameStarted) return; // let the start screen scroll normally
+  e.preventDefault();
+}, {passive:false});
 
 function getInputVec(){
   let dx=0, dy=0;
@@ -1325,7 +1358,7 @@ function nearestToBall(team){
 
 function updateAuto(){
   if(gameOver||kickoffTimer>0) return;
-  const near = nearestToBall(blueTeam.filter(p=>!p.isKeeper));
+  const near = nearestToBall(blueTeam.filter(p=>!p.isKeeper && p.active));
   if(near) controlled = near;
 }
 
@@ -1361,7 +1394,7 @@ function outfieldAI(p, team, opponentGoalX){
     // dribble toward opponent goal
     moveTowards(p, opponentGoalX, H/2 + (p.homeY-H/2)*0.3, p.speed);
   } else {
-    const near = nearestToBall(team.filter(q=>!q.isKeeper));
+    const near = nearestToBall(team.filter(q=>!q.isKeeper && q.active));
     if(near===p){
       moveTowards(p, ball.x, ball.y, p.speed);
     } else {
@@ -1432,9 +1465,11 @@ function aiDecision(p, team, oppTeam, opponentGoalX){
   if(p.passCd > 0){ p.passCd--; return; }
 
   const distToGoal = Math.abs(opponentGoalX - p.x);
-  // Shoot if close to goal, roughly facing it, with modest randomness (keeps it beatable)
-  if(distToGoal < 175 && Math.abs(p.y - H/2) < 130){
-    let shotChance = 0.028;
+  // Shoot if close to goal, roughly facing it, with modest randomness (keeps it beatable).
+  // Air Football: players can never get close to goal (halfway line), so it's always a long flick.
+  const inRange = selectedMode==='air' ? true : (distToGoal < 175 && Math.abs(p.y - H/2) < 130);
+  if(inRange){
+    let shotChance = selectedMode==='air' ? 0.018 : 0.028;
     if(p.team==='red'){
       const diff = DIFFICULTIES[selectedDifficulty];
       shotChance *= diff.shotMult * selectedOpponent.shotMult;
@@ -1443,7 +1478,7 @@ function aiDecision(p, team, oppTeam, opponentGoalX){
       const targetY = H/2 + (Math.random()-0.5)*60;
       const dx = opponentGoalX - p.x, dy = targetY - p.y;
       const dd = Math.hypot(dx,dy) || 1;
-      const power = 9.5;
+      const power = selectedMode==='air' ? 15 : 9.5;
       ball.vx = (dx/dd)*power; ball.vy = (dy/dd)*power;
       ball.owner = null;
       p.passCd = 40;
@@ -1454,11 +1489,11 @@ function aiDecision(p, team, oppTeam, opponentGoalX){
 
   // Pass under pressure: find nearest opponent, and if they're closing in, look for a teammate
   let nearestOpp = null, nd = Infinity;
-  for(const o of oppTeam){ const d = dist(o,p); if(d<nd){ nd=d; nearestOpp=o; } }
+  for(const o of oppTeam){ if(!o.active) continue; const d = dist(o,p); if(d<nd){ nd=d; nearestOpp=o; } }
   if(nd < 48){
     let target = null, bestScore = -Infinity;
     for(const t of team){
-      if(t === p || t.isKeeper) continue;
+      if(t === p || t.isKeeper || !t.active) continue;
       const advancement = (team===blueTeam) ? (t.x - p.x) : (p.x - t.x);
       const d = dist(t, p);
       if(d > 240 || d < 20) continue;
@@ -1549,7 +1584,7 @@ function updateScoreboard(){
 
 // ---- Player possession & controls ----
 function handlePossession(){
-  const allPlayers = blueTeam.concat(redTeam);
+  const allPlayers = blueTeam.concat(redTeam).filter(p=>p.active);
   if(ball.owner){
     // owner carries ball slightly ahead
     const p = ball.owner;
@@ -1612,7 +1647,8 @@ function updatePlayerControl(){
     if(ball.owner===p){
       const facing = p._facing || {dx: (p.team==='blue'?1:-1), dy:0};
       const atkBonus = (p===starPlayer) ? (playerStats.ATT-70)/9 : 0;
-      const power = 6 + shootCharge + atkBonus;
+      const airBoost = selectedMode==='air' ? 7 : 0;
+      const power = 6 + shootCharge + atkBonus + airBoost;
       ball.vx = facing.dx*power;
       ball.vy = facing.dy*power;
       ball.owner = null;
@@ -1632,7 +1668,7 @@ function updatePlayerControl(){
 
 // ---- Collision between players (soft push) ----
 function resolvePlayerCollisions(){
-  const all = blueTeam.concat(redTeam);
+  const all = blueTeam.concat(redTeam).filter(p=>p.active);
   for(let i=0;i<all.length;i++){
     for(let j=i+1;j<all.length;j++){
       const a=all[i], b=all[j];
@@ -1649,35 +1685,55 @@ function resolvePlayerCollisions(){
 }
 
 function clampAllToPitch(){
+  const midBuffer = 7;
   blueTeam.concat(redTeam).forEach(p=>{
+    if(!p.active) return;
     p.x = clamp(p.x, pitch.x+p.r, pitch.x+pitch.w-p.r);
     p.y = clamp(p.y, pitch.y+p.r, pitch.y+pitch.h-p.r);
+    // Air Football: nobody may cross the halfway line — pure zone play, like air hockey mallets
+    if(selectedMode === 'air'){
+      if(p.team==='blue') p.x = Math.min(p.x, W/2 - midBuffer);
+      else p.x = Math.max(p.x, W/2 + midBuffer);
+    }
   });
 }
 
 // ---- Drawing ----
 function drawPitch(){
-  ctx.fillStyle = '#1a5c2a';
+  const isAir = selectedMode === 'air';
+  ctx.fillStyle = isAir ? '#0a1830' : '#1a5c2a';
   ctx.fillRect(0,0,W,H);
-  // mow stripes
-  ctx.fillStyle = 'rgba(255,255,255,0.03)';
-  for(let i=0;i<pitch.w; i+=40){
-    if((i/40)%2===0) ctx.fillRect(pitch.x+i, pitch.y, 40, pitch.h);
+  if(isAir){
+    // subtle radial rink glow
+    const grad = ctx.createRadialGradient(W/2,H/2,20,W/2,H/2,420);
+    grad.addColorStop(0,'rgba(120,180,255,0.10)');
+    grad.addColorStop(1,'rgba(120,180,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,W,H);
+  } else {
+    // mow stripes
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    for(let i=0;i<pitch.w; i+=40){
+      if((i/40)%2===0) ctx.fillRect(pitch.x+i, pitch.y, 40, pitch.h);
+    }
   }
-  ctx.strokeStyle = '#e8e8d0';
+  ctx.strokeStyle = isAir ? '#7ab8ff' : '#e8e8d0';
   ctx.lineWidth = 2;
   ctx.strokeRect(pitch.x, pitch.y, pitch.w, pitch.h);
-  // center line
+  // center line — the wall neither team may cross in Air Football
   ctx.beginPath();
   ctx.moveTo(W/2, pitch.y); ctx.lineTo(W/2, pitch.y+pitch.h);
+  if(isAir){ ctx.strokeStyle = 'rgba(122,184,255,0.8)'; ctx.lineWidth = 3; }
   ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = isAir ? '#7ab8ff' : '#e8e8d0';
   // center circle
   ctx.beginPath();
   ctx.arc(W/2, H/2, 50, 0, Math.PI*2);
   ctx.stroke();
   ctx.beginPath();
   ctx.arc(W/2,H/2,2,0,Math.PI*2);
-  ctx.fillStyle='#e8e8d0'; ctx.fill();
+  ctx.fillStyle= isAir ? '#7ab8ff' : '#e8e8d0'; ctx.fill();
 
   // penalty boxes
   ctx.strokeRect(pitch.x, H/2-90, 70, 180);
@@ -1870,11 +1926,11 @@ function tick(now){
     if(!goalPending){
       updateAuto();
       updatePlayerControl();
-      blueTeam.forEach(p=>{ if(p!==controlled) outfieldAI(p, blueTeam, pitch.x+pitch.w); });
-      redTeam.forEach(p=> outfieldAI(p, redTeam, pitch.x));
-      blueTeam.forEach(p=> aiDecision(p, blueTeam, redTeam, pitch.x+pitch.w));
-      redTeam.forEach(p=> aiDecision(p, redTeam, blueTeam, pitch.x));
-      updateTackles();
+      blueTeam.filter(p=>p.active).forEach(p=>{ if(p!==controlled) outfieldAI(p, blueTeam, pitch.x+pitch.w); });
+      redTeam.filter(p=>p.active).forEach(p=> outfieldAI(p, redTeam, pitch.x));
+      blueTeam.filter(p=>p.active).forEach(p=> aiDecision(p, blueTeam, redTeam, pitch.x+pitch.w));
+      redTeam.filter(p=>p.active).forEach(p=> aiDecision(p, redTeam, blueTeam, pitch.x));
+      if(selectedMode !== 'air') updateTackles(); // Air Football: no tackling — it's all about zone control & interception
       resolvePlayerCollisions();
       clampAllToPitch();
       handlePossession();
@@ -1895,7 +1951,7 @@ function tick(now){
   ctx.translate(-camera.x, -camera.y);
 
   drawPitch();
-  blueTeam.concat(redTeam).forEach(drawPlayer);
+  blueTeam.concat(redTeam).filter(p=>p.active).forEach(drawPlayer);
   drawBall();
   drawShootMeter();
   drawPassMeter();
@@ -1934,14 +1990,28 @@ document.querySelectorAll('.statBtn').forEach(btn=>{
 // ---- Difficulty & opponent team selectors ----
 const DIFF_KEY = 'retroCup86_difficulty';
 const OPP_KEY = 'retroCup86_opponent';
+const MODE_KEY = 'retroCup86_mode';
+const MODE_BLURBS = {
+  classic: 'Full squad, zoomed-in camera, tackling allowed.',
+  air: '3-a-side, stay in your half, whole pitch visible, no tackling — flick it past them.'
+};
 try {
   const savedDiff = localStorage.getItem(DIFF_KEY);
   if(savedDiff && DIFFICULTIES[savedDiff]) selectedDifficulty = savedDiff;
   const savedOpp = localStorage.getItem(OPP_KEY);
   const found = OPPONENTS.find(o=>o.id===savedOpp);
   if(found) selectedOpponent = found;
+  const savedMode = localStorage.getItem(MODE_KEY);
+  if(savedMode === 'classic' || savedMode === 'air') selectedMode = savedMode;
 } catch(e){}
 
+document.querySelectorAll('#modeRow .pillBtn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    selectedMode = btn.dataset.mode;
+    try { localStorage.setItem(MODE_KEY, selectedMode); } catch(e){}
+    renderSelectors();
+  });
+});
 const opponentRow = document.getElementById('opponentRow');
 OPPONENTS.forEach(opp=>{
   const btn = document.createElement('button');
@@ -1963,6 +2033,10 @@ document.querySelectorAll('#difficultyRow .pillBtn').forEach(btn=>{
   });
 });
 function renderSelectors(){
+  document.querySelectorAll('#modeRow .pillBtn').forEach(btn=>{
+    btn.classList.toggle('selected', btn.dataset.mode === selectedMode);
+  });
+  document.getElementById('modeBlurb').textContent = MODE_BLURBS[selectedMode];
   document.querySelectorAll('#difficultyRow .pillBtn').forEach(btn=>{
     btn.classList.toggle('selected', btn.dataset.difficulty === selectedDifficulty);
   });
@@ -1972,6 +2046,39 @@ function renderSelectors(){
   document.getElementById('opponentBlurb').textContent = selectedOpponent.name + ' — ' + selectedOpponent.blurb;
 }
 renderSelectors();
+
+function setupModeRoster(){
+  if(selectedMode === 'air'){
+    ZOOM = 1.0;
+    // 3-a-side: keeper + 2 outfield. Deactivate the extra two per team and pull
+    // everyone into a tight own-half formation, like air-hockey mallets.
+    [blueTeam[3], blueTeam[4], redTeam[3], redTeam[4]].forEach(p=>{ p.active = false; });
+    [blueTeam[0], blueTeam[1], blueTeam[2], redTeam[0], redTeam[1], redTeam[2]].forEach(p=>{ p.active = true; });
+
+    blueTeam[0].homeX = 55;  blueTeam[0].homeY = H/2;
+    blueTeam[1].homeX = 210; blueTeam[1].homeY = H/2-75;
+    blueTeam[2].homeX = 290; blueTeam[2].homeY = H/2+65;
+
+    redTeam[0].homeX = W-55;  redTeam[0].homeY = H/2;
+    redTeam[1].homeX = W-210; redTeam[1].homeY = H/2-75;
+    redTeam[2].homeX = W-290; redTeam[2].homeY = H/2+65;
+  } else {
+    ZOOM = 1.42;
+    blueTeam.forEach(p=>{ p.active = true; });
+    redTeam.forEach(p=>{ p.active = true; });
+    blueTeam[0].homeX = 60;  blueTeam[0].homeY = H/2;
+    blueTeam[1].homeX = 180; blueTeam[1].homeY = 130;
+    blueTeam[2].homeX = 180; blueTeam[2].homeY = H/2;
+    blueTeam[3].homeX = 180; blueTeam[3].homeY = H-130;
+    blueTeam[4].homeX = 320; blueTeam[4].homeY = H/2-60;
+
+    redTeam[0].homeX = W-60;  redTeam[0].homeY = H/2;
+    redTeam[1].homeX = W-180; redTeam[1].homeY = 130;
+    redTeam[2].homeX = W-180; redTeam[2].homeY = H/2;
+    redTeam[3].homeX = W-180; redTeam[3].homeY = H-130;
+    redTeam[4].homeX = W-320; redTeam[4].homeY = H/2+60;
+  }
+}
 
 function startGame(){
   if(gameStarted) return;
@@ -1985,11 +2092,14 @@ function startGame(){
     (wrapEl.requestFullscreen || wrapEl.webkitRequestFullscreen || function(){}).call(wrapEl).catch(()=>{});
   }
 
+  setupModeRoster();
+
   // Apply the chosen stats to your "star" player (the one you start out controlling).
   // SPD -> movement speed, ATT -> shot power, DEF/SKL -> tackle duels (see updateTackles).
   starPlayer = blueTeam[2];
   starPlayer.isStar = true;
   starPlayer.speed = starPlayer.baseSpeed * (0.85 + playerStats.SPD/300);
+  controlled = blueTeam[2];
 
   // Apply difficulty + opponent-team flavor to the red team's pace.
   const diff = DIFFICULTIES[selectedDifficulty];
