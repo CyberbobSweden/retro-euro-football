@@ -707,7 +707,7 @@
           <div id="achievementCase"></div>
         </div>
 
-        <div id="versionTag">v1.7.0</div>
+        <div id="versionTag">v1.7.1</div>
       </div>
     </div>
   </div>
@@ -715,7 +715,7 @@
     <span id="scoreline">BLUE 0 — 0 RED</span>
     <span id="clock">00:00</span>
     <span id="period">1ST HALF</span>
-    <span id="versionTagHud">v1.7.0</span>
+    <span id="versionTagHud">v1.7.1</span>
   </div>
   <div id="tip">ARROWS/WASD move &nbsp;·&nbsp; SPACE shoot (hold to power up) &nbsp;·&nbsp; Q pass (hold for a lob) &nbsp;·&nbsp; SHIFT sprint &nbsp;·&nbsp; run into an opponent with the ball to tackle</div>
 </div>
@@ -723,7 +723,7 @@
 <script>
 (function(){
 const canvas = document.getElementById('game');
-const GAME_VERSION = 'v1.7.0';
+const GAME_VERSION = 'v1.7.1';
 document.getElementById('versionTag').textContent = GAME_VERSION;
 document.getElementById('versionTagHud').textContent = GAME_VERSION;
 const ctx = canvas.getContext('2d');
@@ -748,6 +748,7 @@ let paused = false;
 let kickoffTimer = 0;
 let gameOver = false;
 let gameStarted = false;
+let tickLoopStarted = false;
 let playerName = 'PLAYER';
 let matchWasBehind = false;
 let tacklesWonThisMatch = 0;
@@ -1841,7 +1842,7 @@ function tick(now){
   const dt = Math.min(0.033, (now-lastTick)/1000);
   lastTick = now;
 
-  if(!gameOver){
+  if(gameStarted && !gameOver){
     if(kickoffTimer>0){
       kickoffTimer -= 1;
     } else {
@@ -1863,6 +1864,7 @@ function tick(now){
       if(score.red === 0) unlockAchievement('clean_sheet');
       if(score.blue > score.red && matchWasBehind) unlockAchievement('comeback');
       if(newCareerTotal >= 50) unlockAchievement('goal_machine');
+      setTimeout(returnToStartScreen, 2600);
     }
 
     if(!goalPending){
@@ -2000,7 +2002,24 @@ function startGame(){
   updateScoreboard();
   showMsg('KICK OFF!', 1500);
   resetKickoff();
-  requestAnimationFrame(tick);
+  if(!tickLoopStarted){ tickLoopStarted = true; requestAnimationFrame(tick); }
+}
+
+function returnToStartScreen(){
+  gameStarted = false;
+  gameOver = false;
+  score = { blue:0, red:0 };
+  matchTime = 0;
+  half = 1;
+  matchWasBehind = false;
+  tacklesWonThisMatch = 0;
+  resetKickoff();
+  updateScoreboard();
+  renderHighscores();
+  renderAchievementCase();
+  updatePlayerCard();
+  startScreen.style.display = 'flex';
+  startBtn.textContent = '⚽ PLAY AGAIN';
 }
 
 startBtn.addEventListener('click', startGame);
