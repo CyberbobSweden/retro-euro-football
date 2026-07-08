@@ -707,7 +707,7 @@
           <div id="achievementCase"></div>
         </div>
 
-        <div id="versionTag">v1.6.0</div>
+        <div id="versionTag">v1.7.0</div>
       </div>
     </div>
   </div>
@@ -715,15 +715,15 @@
     <span id="scoreline">BLUE 0 — 0 RED</span>
     <span id="clock">00:00</span>
     <span id="period">1ST HALF</span>
-    <span id="versionTagHud">v1.6.0</span>
+    <span id="versionTagHud">v1.7.0</span>
   </div>
-  <div id="tip">ARROWS/WASD move &nbsp;·&nbsp; SPACE shoot (hold to power up) &nbsp;·&nbsp; Q quick pass &nbsp;·&nbsp; SHIFT sprint &nbsp;·&nbsp; run into an opponent with the ball to tackle</div>
+  <div id="tip">ARROWS/WASD move &nbsp;·&nbsp; SPACE shoot (hold to power up) &nbsp;·&nbsp; Q pass (hold for a lob) &nbsp;·&nbsp; SHIFT sprint &nbsp;·&nbsp; run into an opponent with the ball to tackle</div>
 </div>
 
 <script>
 (function(){
 const canvas = document.getElementById('game');
-const GAME_VERSION = 'v1.6.0';
+const GAME_VERSION = 'v1.7.0';
 document.getElementById('versionTag').textContent = GAME_VERSION;
 document.getElementById('versionTagHud').textContent = GAME_VERSION;
 const ctx = canvas.getContext('2d');
@@ -934,7 +934,7 @@ function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
 function lerp(a,b,t){ return a+(b-a)*t; }
 
 // ---- Camera: zoom in and follow the action instead of showing the whole pitch at once ----
-const ZOOM = 1.6;
+const ZOOM = 1.42;
 let camera = { x: W/2, y: H/2 };
 let shakeAmount = 0;
 function triggerShake(amount){ shakeAmount = Math.max(shakeAmount, amount); }
@@ -1006,13 +1006,14 @@ function drawConfetti(){
 // ---- Ball ----
 const ball = {
   x: W/2, y: H/2, vx:0, vy:0, r:6,
+  z:0, vz:0, // height above the pitch, for lobbed passes — visual arc + shadow, doesn't affect x/y physics
   owner:null,
   deniedPlayer:null, deniedTimer:0
 };
 
 function resetKickoff(dir){
   goalPending = false;
-  ball.x = W/2; ball.y = H/2; ball.vx=0; ball.vy=0; ball.owner=null;
+  ball.x = W/2; ball.y = H/2; ball.vx=0; ball.vy=0; ball.z=0; ball.vz=0; ball.owner=null;
   ball.deniedPlayer=null; ball.deniedTimer=0;
   blueTeam.forEach(p=>p.reset());
   redTeam.forEach(p=>p.reset());
@@ -1242,11 +1243,12 @@ sprintBtn.addEventListener('touchend', e=>{ e.preventDefault(); touchSprint=fals
 sprintBtn.addEventListener('mousedown', ()=>{ touchSprint=true; sprintBtn.classList.add('active'); });
 window.addEventListener('mouseup', ()=>{ if(touchSprint){ touchSprint=false; sprintBtn.classList.remove('active'); } });
 
-// PASS — instant quick pass to the best-placed teammate (no charge-up, unlike SHOOT)
+// PASS — tap for a quick ground pass, hold a bit longer for a lob over defenders
 const passBtn = document.getElementById('passBtn');
-function doQuickPass(){
-  const p = controlled;
-  if(!p || ball.owner!==p || kickoffTimer>0) return;
+let touchPass = false;
+let passCharge = 0;
+function isPassActive(){ return keys['q'] || touchPass; }
+function findPassTarget(p){
   const team = p.team==='blue' ? blueTeam : redTeam;
   let target=null, bestScore=-Infinity;
   for(const t of team){
@@ -1254,25 +1256,38 @@ function doQuickPass(){
     const facing = p._facing || {dx:(p.team==='blue'?1:-1), dy:0};
     const dx=t.x-p.x, dy=t.y-p.y;
     const d = Math.hypot(dx,dy) || 1;
-    if(d>280) continue;
+    if(d>320) continue;
     const dot = (dx/d)*facing.dx + (dy/d)*facing.dy; // prefer teammates ahead of facing direction
     const score = dot*40 - d*0.12;
     if(score>bestScore){ bestScore=score; target=t; }
   }
-  if(target){
-    const dx=target.x-p.x, dy=target.y-p.y;
-    const d=Math.hypot(dx,dy)||1;
+  return target;
+}
+function executePass(charge){
+  const p = controlled;
+  if(!p || ball.owner!==p || kickoffTimer>0) return;
+  const target = findPassTarget(p);
+  if(!target) return;
+  const dx=target.x-p.x, dy=target.y-p.y;
+  const d=Math.hypot(dx,dy)||1;
+  ball.owner=null;
+  ball.deniedPlayer=null;
+  if(charge < 4){
+    // quick ground pass
     const power = 7.5;
     ball.vx=(dx/d)*power; ball.vy=(dy/d)*power;
-    ball.owner=null;
-    ball.deniedPlayer=null;
-    playKick();
+  } else {
+    // lob pass — arcs up and over defenders, can't be intercepted until it lands
+    const power = 6.5 + Math.min(charge, 14)*0.25;
+    ball.vx=(dx/d)*power; ball.vy=(dy/d)*power;
+    ball.vz = 5.5 + Math.min(charge, 14)*0.25;
   }
+  playKick();
 }
-passBtn.addEventListener('touchstart', e=>{ e.preventDefault(); passBtn.classList.add('active'); doQuickPass(); }, {passive:false});
-passBtn.addEventListener('touchend', e=>{ e.preventDefault(); passBtn.classList.remove('active'); }, {passive:false});
-passBtn.addEventListener('mousedown', ()=>{ passBtn.classList.add('active'); doQuickPass(); });
-window.addEventListener('mouseup', ()=>{ passBtn.classList.remove('active'); });
+passBtn.addEventListener('touchstart', e=>{ e.preventDefault(); touchPass=true; passBtn.classList.add('active'); }, {passive:false});
+passBtn.addEventListener('touchend', e=>{ e.preventDefault(); touchPass=false; passBtn.classList.remove('active'); }, {passive:false});
+passBtn.addEventListener('mousedown', ()=>{ touchPass=true; passBtn.classList.add('active'); });
+window.addEventListener('mouseup', ()=>{ touchPass=false; passBtn.classList.remove('active'); });
 
 document.getElementById('wrap').addEventListener('touchmove', e=>{ e.preventDefault(); }, {passive:false});
 
@@ -1296,10 +1311,6 @@ function isShootActive(){
 function isSprintActive(){
   return keys['shift'] || touchSprint;
 }
-// keyboard quick-pass on 'q' (edge-triggered so it fires once per press)
-window.addEventListener('keydown', e=>{
-  if(e.key.toLowerCase()==='q') doQuickPass();
-});
 
 // ---- AI ----
 function nearestToBall(team){
@@ -1370,9 +1381,10 @@ function updateTackles(){
   for(const p of opponents){
     if(p.tackleCd > 0){ p.tackleCd--; continue; }
     const d = dist(p, owner);
-    if(d < p.r + owner.r + 6){
+    if(d < p.r + owner.r + 8){
       const isHuman = (p === controlled);
-      let chance = isHuman ? 0.24 : 0.06;
+      let chance = isHuman ? 0.32 : 0.08;
+      if(p.isKeeper) chance += 0.22; // keepers smother the ball in the box far better than outfield defenders
       if(p.team==='red'){
         const diff = DIFFICULTIES[selectedDifficulty];
         chance *= diff.tackleMult * selectedOpponent.tackleMult;
@@ -1380,7 +1392,7 @@ function updateTackles(){
       if(isHuman && p._sprinting) chance += 0.06; // sprinting into a challenge wins it more often
       if(isHuman && p===starPlayer) chance += (playerStats.DEF-70)/350; // DEF stat: better at winning the ball
       if(owner===starPlayer) chance -= (playerStats.SKL-70)/450; // SKL stat: harder to dispossess when you have it
-      chance = Math.max(0.03, Math.min(0.65, chance));
+      chance = Math.max(0.05, Math.min(0.75, chance));
       if(Math.random() < chance){
         ball.owner = null;
         ball.deniedPlayer = owner;
@@ -1400,6 +1412,13 @@ function updateTackles(){
         }
       } else {
         p.tackleCd = 5; // short pause between duel rolls so it feels responsive, not spammy
+        // nudge apart a touch even on a failed challenge — stops players from visually "gluing"
+        // to each other while duel rolls keep happening at point-blank range
+        if(d > 0.5){
+          const nx = (p.x - owner.x)/d, ny = (p.y - owner.y)/d;
+          p.x += nx*1.4; p.y += ny*1.4;
+          owner.x -= nx*0.6; owner.y -= ny*0.6;
+        }
       }
     }
   }
@@ -1472,6 +1491,13 @@ function updateBall(){
   ball.vy *= 0.985;
   if(Math.hypot(ball.vx,ball.vy) < 0.03){ ball.vx=0; ball.vy=0; }
 
+  // height arc for lobbed passes (visual only — x/y motion is unaffected by height)
+  if(ball.z > 0 || ball.vz !== 0){
+    ball.z += ball.vz;
+    ball.vz -= 0.5; // gravity
+    if(ball.z <= 0){ ball.z = 0; ball.vz = 0; playBounce(); }
+  }
+
   // bounds (with goal gaps)
   const topB = pitch.y, botB = pitch.y+pitch.h;
   const leftB = pitch.x, rightB = pitch.x+pitch.w;
@@ -1535,6 +1561,7 @@ function handlePossession(){
     if(dist(p, {x:targetX,y:targetY}) > 30) ball.owner=null;
   } else {
     if(ball.deniedTimer > 0) ball.deniedTimer--;
+    if(ball.z > 4) return; // ball is in the air on a lob — nobody can control it until it comes down
     // Keepers get first dibs with a generous radius and NO speed cap — a real save,
     // not just scooping up balls that have already slowed to a crawl.
     let caught = false;
@@ -1592,6 +1619,13 @@ function updatePlayerControl(){
       playKick();
     }
     shootCharge = 0;
+  }
+
+  if(isPassActive()){
+    passCharge = Math.min(passCharge+1.1, 14);
+  } else if(passCharge>0){
+    executePass(passCharge);
+    passCharge = 0;
   }
 }
 
@@ -1733,12 +1767,17 @@ function drawPlayer(p){
 function drawBall(){
   ctx.save();
   ctx.translate(ball.x, ball.y);
+  // ground shadow always sits at true (x,y) — shrinks and fades as the ball gets higher
+  const shadowScale = Math.max(0.35, 1 - ball.z/40);
   ctx.beginPath();
-  ctx.ellipse(0, ball.r*0.8, ball.r*0.9, ball.r*0.35, 0,0,Math.PI*2);
-  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.ellipse(0, ball.r*0.8, ball.r*0.9*shadowScale, ball.r*0.35*shadowScale, 0,0,Math.PI*2);
+  ctx.fillStyle = `rgba(0,0,0,${0.3*shadowScale})`;
   ctx.fill();
+  // the ball itself is drawn offset upward by its height, and slightly bigger for depth
+  const liftScale = 1 + ball.z/60;
+  ctx.translate(0, -ball.z);
   ctx.beginPath();
-  ctx.arc(0,0,ball.r,0,Math.PI*2);
+  ctx.arc(0,0,ball.r*liftScale,0,Math.PI*2);
   ctx.fillStyle = '#f2f2e8';
   ctx.fill();
   ctx.strokeStyle = '#333';
@@ -1755,6 +1794,16 @@ function drawShootMeter(){
   ctx.fillRect(p.x-w/2, p.y-p.r-12, w, h);
   ctx.fillStyle = shootCharge>13 ? '#e34b4b' : '#f2d24b';
   ctx.fillRect(p.x-w/2, p.y-p.r-12, w*(shootCharge/18), h);
+}
+
+function drawPassMeter(){
+  if(passCharge<=0 || !controlled) return;
+  const p = controlled;
+  const w = 24, h=4;
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.fillRect(p.x-w/2, p.y-p.r-18, w, h);
+  ctx.fillStyle = passCharge>=4 ? '#7ab8ff' : '#e8e8d0';
+  ctx.fillRect(p.x-w/2, p.y-p.r-18, w*(Math.min(passCharge,14)/14), h);
 }
 
 function drawKickoffOverlay(){
@@ -1847,6 +1896,7 @@ function tick(now){
   blueTeam.concat(redTeam).forEach(drawPlayer);
   drawBall();
   drawShootMeter();
+  drawPassMeter();
   drawTackleFlashes();
   drawConfetti();
 
