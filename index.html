@@ -723,7 +723,7 @@
           <div id="achievementCase"></div>
         </div>
 
-        <div id="versionTag">v1.9.0</div>
+        <div id="versionTag">v1.9.1</div>
       </div>
     </div>
   </div>
@@ -731,7 +731,7 @@
     <span id="scoreline">BLUE 0 — 0 RED</span>
     <span id="clock">00:00</span>
     <span id="period">1ST HALF</span>
-    <span id="versionTagHud">v1.9.0</span>
+    <span id="versionTagHud">v1.9.1</span>
   </div>
   <div id="tip">ARROWS/WASD move &nbsp;·&nbsp; SPACE shoot (hold to power up) &nbsp;·&nbsp; Q pass (hold for a lob) &nbsp;·&nbsp; SHIFT sprint &nbsp;·&nbsp; run into an opponent with the ball to tackle</div>
 </div>
@@ -739,7 +739,7 @@
 <script>
 (function(){
 const canvas = document.getElementById('game');
-const GAME_VERSION = 'v1.9.0';
+const GAME_VERSION = 'v1.9.1';
 document.getElementById('versionTag').textContent = GAME_VERSION;
 document.getElementById('versionTagHud').textContent = GAME_VERSION;
 const ctx = canvas.getContext('2d');
@@ -1371,10 +1371,27 @@ function nearestToBall(team){
   return best;
 }
 
+let switchCooldown = 0;
 function updateAuto(){
   if(gameOver||kickoffTimer>0) return;
-  const near = nearestToBall(blueTeam.filter(p=>!p.isKeeper && p.active));
-  if(near) controlled = near;
+  if(switchCooldown>0) switchCooldown--;
+  // never yank control away from you while you're actively dribbling — that's the #1 thing
+  // that made switching feel chaotic, since running with the ball would just hand it off
+  if(ball.owner === controlled) return;
+  if(switchCooldown>0) return;
+
+  const candidates = blueTeam.filter(p=>!p.isKeeper && p.active);
+  const near = nearestToBall(candidates);
+  if(!near || near===controlled) return;
+
+  // hysteresis: only switch if the alternative is MEANINGFULLY closer to the ball, not just
+  // marginally so — otherwise two players near-equidistant cause constant flip-flopping
+  const distControlled = dist(controlled, ball);
+  const distNear = dist(near, ball);
+  if(distControlled - distNear > 26){
+    controlled = near;
+    switchCooldown = 20;
+  }
 }
 
 function moveTowards(p, tx, ty, speed){
@@ -1387,9 +1404,14 @@ function moveTowards(p, tx, ty, speed){
 }
 
 function keeperAI(keeper, goalX){
-  // anticipate where the ball is heading, not just where it is right now
-  const leadY = ball.y + ball.vy*7;
-  const targetY = clamp(leadY, H/2-goalW/2+6, H/2+goalW/2-6);
+  // anticipate where the ball is heading, but gently — a big lead multiplier combined with a
+  // bouncy walled pitch (ball.vy flips sign on every wall bounce) made keepers visibly vibrate
+  // as they chased every tiny oscillation. Keep the lead small and smooth the target over time.
+  const leadY = ball.y + clamp(ball.vy*2, -25, 25);
+  const rawTargetY = clamp(leadY, H/2-goalW/2+6, H/2+goalW/2-6);
+  keeper._targetY = (keeper._targetY===undefined) ? rawTargetY : lerp(keeper._targetY, rawTargetY, 0.18);
+  const targetY = keeper._targetY;
+
   let targetX = keeper.homeX;
   // come out further & faster to close the angle when the ball is a real threat
   const closeThreshold = keeper.team==='blue' ? 155 : W-155;
